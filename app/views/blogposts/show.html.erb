@@ -1,0 +1,9 @@
+<p id="notice"><%= notice %></p>
+
+<h1><%= @blogpost.title %></h1>
+<p class=boxed><%= @blogpost.contents %></p>
+
+<%= render template: 'comments/index' %>
+
+<%= link_to 'Edit', edit_blogpost_path(@blogpost) %> |
+<%= link_to 'Back', blogposts_path %>

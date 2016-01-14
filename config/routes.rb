@@ -1,4 +1,6 @@
 Rails.application.routes.draw do
+  resources :comments
+  resources :blogposts
 	# The priority is based upon order of creation: first created -> highest priority.
 	# See how all your routes lay out with "rake routes".
 	
@@ -54,5 +56,6 @@ Rails.application.routes.draw do
 	#     resources :products
 	#   end
 	
-	root 'application#hello'
+	root 'blogposts#index'
+	get 'hello' => 'application#hello'
 end
