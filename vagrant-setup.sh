@@ -1,4 +1,6 @@
-#!/bin/sh 
+#!/bin/bash
+
+set -e
 
 #The following parameters are to configure PostgreSQL. 
 # Edit the following to change the name of the database user that will be created:
@@ -14,100 +16,100 @@ PG_VERSION=9.3
 
 export DEBIAN_FRONTEND=noninteractive #this will suppress interaction with the user, along with the -y flag of apt-get (see below)
 
+to_install=(
+	build-essential
+	git-core
+	libgmp-dev
+	libpq-dev
+	"postgresql-$PG_VERSION"
+	"postgresql-contrib-$PG_VERSION"
+)
 
-#add a repository for ruby (this means apt-get will query this repo to obtain the packages we want)
-apt-add-repository -y ppa:brightbox/ruby-ng
-
-# Update package list and upgrade all packages
 apt-get update
 apt-get -y upgrade
+apt-get -y install "${to_install[@]}"
 
-############################### Edit here #
+# Ruby Stuff
+gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
+curl -sSL https://get.rvm.io | bash -s stable --ruby
+usermod -aG rvm vagrant
+. /etc/profile.d/rvm.sh
+rvm install ruby-2.2.2
+gem install bundler
 
-# install the following packages:  
-#       - build-essential  (development tools)
-#       - libpq-dev (to develop postgresql client apps)
-#       - ruby2.3 (Ruby language, version 2.3 ! accessible through the repo we added above)
-#       - ruby2.3-dev
+wget -O- https://toolbelt.heroku.com/install-ubuntu.sh | sh
 
-############################################
-#install postgresql
-apt-get -y install "postgresql-$PG_VERSION" "postgresql-contrib-$PG_VERSION"
-
-#the following are PostgreSQL configuration files that need to be edited to change permissions, authentication methods, etc.
 PG_CONF="/etc/postgresql/$PG_VERSION/main/postgresql.conf"
 PG_HBA="/etc/postgresql/$PG_VERSION/main/pg_hba.conf"
 
-
-# Edit postgresql.conf to change listen address to '*':
-sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_CONF"
-
-############################### Edit here #
-
-# Edit pg_hba.conf to add password authentication
-#
-
-############################################
-
-echo "host    all             all             all                     md5" >> "$PG_HBA"
-
-# Explicitly set default client_encoding
+sed -ie "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_CONF"
 echo "client_encoding = utf8" >> "$PG_CONF"
 
-# Restart so that all new config is loaded:
+cat <<-EOF > "$PG_HBA"
+	# TYPE  DATABASE USER      ADDRESS      METHOD
+	local   all      postgres  peer
+	local   all      all       md5
+	host    all      all       127.0.0.1/32 md5
+	host    all      all       ::1/128      md5
+	host    all      all       all          md5
+EOF
+
 service postgresql restart
 
-# 'cat' (write) the following lines (up to 'EOF') to the program psql, which is the interactive command-line of PostgreSQL
-cat << EOF | su - postgres -c psql
--- Create the database user:
-CREATE USER $APP_DB_USER WITH PASSWORD '$APP_DB_PASS';
-
--- Create the database:
-CREATE DATABASE $APP_DB_NAME1 WITH OWNER=$APP_DB_USER
-                                  LC_COLLATE='en_US.utf8'
-                                  LC_CTYPE='en_US.utf8'
-                                  ENCODING='UTF8'
-                                  TEMPLATE=template0;
-
-CREATE DATABASE $APP_DB_NAME2 WITH OWNER=$APP_DB_USER
-                                  LC_COLLATE='en_US.utf8'
-                                  LC_CTYPE='en_US.utf8'
-                                  ENCODING='UTF8'
-                                  TEMPLATE=template0;
-
+sudo -u postgres psql <<-EOF
+	-- Create the database user:
+	CREATE USER $APP_DB_USER WITH PASSWORD '$APP_DB_PASS';
+	
+	-- Create the database:
+	CREATE DATABASE $APP_DB_NAME1
+	WITH
+		OWNER=$APP_DB_USER
+		LC_COLLATE='en_US.utf8'
+		LC_CTYPE='en_US.utf8'
+		ENCODING='UTF8'
+		TEMPLATE=template0;
+	
+	CREATE DATABASE $APP_DB_NAME2
+	WITH
+		OWNER=$APP_DB_USER
+		LC_COLLATE='en_US.utf8'
+		LC_CTYPE='en_US.utf8'
+		ENCODING='UTF8'
+		TEMPLATE=template0;
 EOF
 
 
 ###########################################################
 # This is the message you will get when the script finishes
-echo "Successfully created PostgreSQL dev virtual machine."
-echo ""
-echo "Your PostgreSQL database has been setup and can be accessed on your local machine on the forwarded port (default: 15432)"
-echo "  Host: localhost"
-echo "  Port: 15432"
-echo "  Database: $APP_DB_NAME1"
-echo "  Username: $APP_DB_USER"
-echo "  Password: $APP_DB_PASS"
-echo ""
-echo "  Database: $APP_DB_NAME2"
-echo "  Username: $APP_DB_USER"
-echo "  Password: $APP_DB_PASS"
-echo ""
-echo "Admin access to postgres user via VM:"
-echo "  vagrant ssh"
-echo "  sudo su - postgres"
-echo ""
-echo "psql access to app database user via VM:"
-echo "  vagrant ssh"
-echo "  sudo su - postgres"
-echo "  PGUSER=$APP_DB_USER PGPASSWORD=$APP_DB_PASS psql -h localhost $APP_DB_NAME1"
-echo "  PGUSER=$APP_DB_USER PGPASSWORD=$APP_DB_PASS psql -h localhost $APP_DB_NAME2"
-echo ""
-echo "Env variable for application development:"
-echo "  DATABASE_URL=postgresql://$APP_DB_USER:$APP_DB_PASS@localhost:15432/$APP_DB_NAME1"
-echo "  DATABASE_URL=postgresql://$APP_DB_USER:$APP_DB_PASS@localhost:15432/$APP_DB_NAME2"
-echo ""
-echo "Local command to access the database via psql:"
-echo "  PGUSER=$APP_DB_USER PGPASSWORD=$APP_DB_PASS psql -h localhost -p 15432 $APP_DB_NAME1"
-echo "  PGUSER=$APP_DB_USER PGPASSWORD=$APP_DB_PASS psql -h localhost -p 15432 $APP_DB_NAME2"
-
+cat <<-END
+	Successfully created PostgreSQL dev virtual machine.
+	
+	Your PostgreSQL database has been setup and can be accessed on your local machine on the forwarded port (default: 15432)
+	  Host: localhost
+	  Port: 15432
+	  Database: $APP_DB_NAME1
+	  Username: $APP_DB_USER
+	  Password: $APP_DB_PASS
+	
+	  Database: $APP_DB_NAME2
+	  Username: $APP_DB_USER
+	  Password: $APP_DB_PASS
+	
+	Admin access to postgres user via VM:
+	  vagrant ssh
+	  sudo su - postgres
+	
+	psql access to app database user via VM:
+	  vagrant ssh
+	  sudo su - postgres
+	  PGUSER=$APP_DB_USER PGPASSWORD=$APP_DB_PASS psql -h localhost $APP_DB_NAME1
+	  PGUSER=$APP_DB_USER PGPASSWORD=$APP_DB_PASS psql -h localhost $APP_DB_NAME2
+	
+	Env variable for application development:
+	  DATABASE_URL=postgresql://$APP_DB_USER:$APP_DB_PASS@localhost:15432/$APP_DB_NAME1
+	  DATABASE_URL=postgresql://$APP_DB_USER:$APP_DB_PASS@localhost:15432/$APP_DB_NAME2
+	
+	Local command to access the database via psql:
+	  PGUSER=$APP_DB_USER PGPASSWORD=$APP_DB_PASS psql -h localhost -p 15432 $APP_DB_NAME1
+	  PGUSER=$APP_DB_USER PGPASSWORD=$APP_DB_PASS psql -h localhost -p 15432 $APP_DB_NAME2
+END
